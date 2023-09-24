@@ -1,0 +1,44 @@
+# @package _global_
+defaults:
+  - override /data: default
+  - override /model: default
+  - override /callbacks: default
+  - override /trainer: default
+  # - override /logger: default
+
+# tags: ["mnist", "simple_dense_net"]
+# seed: 12345
+
+trainer:
+  min_epochs: 10
+  max_epochs: 10
+  # gradient_clip_val: 0.0
+  accelerator: gpu
+  devices: 1
+  check_val_every_n_epoch: 0
+
+data:
+  _target_: src.datasets.UnalignedDataModule
+  data_dir: ${paths.data_dir}/horse2zebra
+  batch_size: 8
+  num_workers: 12
+  pin_memory: true
+
+model:
+  _target_: src.models.CycleGanModel
+  optimizer1:
+    _target_: torch.optim.Adam
+    _partial_: true
+    lr: 0.0002
+    betas: [0.5, 0.999]
+  optimizer2:
+    _target_: torch.optim.Adam
+    _partial_: true
+    lr: 0.0002
+    betas: [0.5, 0.999]
+  compile: false
+
+# logger:
+#   wandb:
+#     tags: ${tags}
+#     group: "mnist"
