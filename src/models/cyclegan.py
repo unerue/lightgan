@@ -47,14 +47,14 @@ class Discriminator(nn.Module):
         self.x = NLayerDiscriminator(
             input_nc=3,
             ndf=64,
-            n_layers=3,
+            num_layers=3,
             norm_layer=nn.InstanceNorm2d,
             no_antialias=True,
         )
         self.y = NLayerDiscriminator(
             input_nc=3,
             ndf=64,
-            n_layers=3,
+            num_layers=3,
             norm_layer=nn.InstanceNorm2d,
             no_antialias=True,
         )
@@ -68,7 +68,8 @@ class Initializer(IntEnum):
 
 
 def initialize_weights(m: nn.Module, init_type: Initializer = 1, gain: float = 0.02):
-    """define the initialization function
+    """
+    define the initialization function
     init_type: normal | xavier normal | kaiming normal | orthogonal
     gain `` default to 0.02
     """
@@ -76,17 +77,18 @@ def initialize_weights(m: nn.Module, init_type: Initializer = 1, gain: float = 0
     if hasattr(m, "weight") and (classname.find("Conv") != -1 or classname.find("Linear") != -1):
         if Initializer.NORMAL == init_type:
             nn.init.normal_(m.weight.data, mean=0.0, std=gain)
-        elif init_type == 'xavier':
+        elif Initializer.XAVIER_NORMAL == init_type:
             nn.init.xavier_normal_(m.weight.data, gain=gain)
-        elif init_type == 'kaiming':
+        elif Initializer.KAIMING_NORMAL == init_type:
             nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-        elif init_type == 'orthogonal':
+        elif Initializer.ORTHOGONAL == init_type:
             nn.init.orthogonal_(m.weight.data, gain=gain)
         else:
             raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
-        if hasattr(m, 'bias') and m.bias is not None:
+        if hasattr(m, "bias") and m.bias is not None:
             nn.init.constant_(m.bias.data, 0.0)
-    elif classname.find('BatchNorm2d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+    # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+    elif classname.find("BatchNorm2d") != -1:
         nn.init.normal_(m.weight.data, mean=1.0, std=gain)
         nn.init.constant_(m.bias.data, 0.0)
 
