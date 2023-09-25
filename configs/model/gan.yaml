@@ -1,31 +1,21 @@
 # @package _global_
 defaults:
   - override /data: default
-  - override /model: default
-  - override /callbacks: default
   - override /trainer: default
-  # - override /logger: default
+  - override /callbacks: default
 
-# tags: ["mnist", "simple_dense_net"]
-# seed: 12345
-
-trainer:
-  min_epochs: 10
-  max_epochs: 10
-  # gradient_clip_val: 0.0
-  accelerator: gpu
-  devices: 1
-  check_val_every_n_epoch: 0
+tags: ["gan"]
+test: false
 
 data:
   _target_: src.datasets.UnalignedDataModule
   data_dir: ${paths.data_dir}/horse2zebra
-  batch_size: 8
+  batch_size: 64
   num_workers: 12
   pin_memory: true
 
 model:
-  _target_: src.models.CycleGanModel
+  _target_: src.models.GanModel
   optimizer1:
     _target_: torch.optim.Adam
     _partial_: true
@@ -37,8 +27,24 @@ model:
     lr: 0.0002
     betas: [0.5, 0.999]
   compile: false
+  scheduler1:
+    _target_: torch.optim.lr_scheduler.LambdaLR
+    _partial_: true
+    step_size: 50
+    gamma: 0.1
 
-# logger:
-#   wandb:
-#     tags: ${tags}
-#     group: "mnist"
+trainer:
+  max_epochs: 30
+  accelerator: gpu
+  devices: 1
+  check_val_every_n_epoch: 0
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "horse2zebra"
+
+callbacks:
+  model_summary:
+    max_depth: 3
+

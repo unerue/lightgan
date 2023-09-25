@@ -16,6 +16,7 @@ packaging = "^23.1"
 gputil = "^1.4.0"
 wandb = "^0.15.11"
 hydra-colorlog = "^1.2.0"
+torchmetrics = {extras = ["image"], version = "^1.2.0"}
 
 
 [tool.poetry.group.dev.dependencies]

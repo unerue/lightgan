@@ -8,7 +8,7 @@ from .base_model import BaseModel
 from .patchnce import PatchNCELoss
 
 
-class SBModel(BaseModel):
+class SbModel(BaseModel):
     """
     mode: sb | FastCUT, fastcut, sb
     lambda_gan: default=1.0  weight for GAN loss：GAN(G(X))

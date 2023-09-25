@@ -1,6 +1,5 @@
 import itertools
 from typing import Any, Optional
-from enum import IntEnum
 
 import torch
 from torch import nn, optim
@@ -9,7 +8,7 @@ from lightning import LightningModule
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchmetrics.image.kid import KernelInceptionDistance
 
-from ..ops import ResnetGenerator, NLayerDiscriminator, ImagePool
+from ..ops import ResnetGenerator, NLayerDiscriminator, ImagePool, PatchSampleF, GANLoss, PatchNCELoss
 
 
 class Generator(nn.Module):
@@ -27,16 +26,16 @@ class Generator(nn.Module):
             no_antialias=True,
             no_antialias_up=True
         )
-        self.y = ResnetGenerator(
-            input_nc=3,
-            output_nc=3,
-            ngf=64,
-            norm_layer=nn.InstanceNorm2d,
-            use_dropout=True,
-            num_blocks=9,
-            padding_type="reflect",
-            no_antialias=True,
-            no_antialias_up=True
+
+
+
+class F(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.x = PatchSampleF(
+            use_mlp=True,
+            init_type="normal",
+            nc=256,
         )
 
 
@@ -51,43 +50,25 @@ class Discriminator(nn.Module):
             norm_layer=nn.InstanceNorm2d,
             no_antialias=True,
         )
-        self.y = NLayerDiscriminator(
-            input_nc=3,
-            ndf=64,
-            n_layers=3,
-            norm_layer=nn.InstanceNorm2d,
-            no_antialias=True,
-        )
 
 
-class Initializer(IntEnum):
-    NORMAL = 0
-    XAVIER_NORMAL = 1
-    KAIMING_NORMAL = 2
-    ORTHOGONAL = 3
-
-
-def initialize_weights(m: nn.Module, init_type: Initializer = 1, gain: float = 0.02):
-    """define the initialization function
-    init_type: normal | xavier normal | kaiming normal | orthogonal
-    gain `` default to 0.02
-    """
+def initialize_weights(m, init_type="normal", init_gain=0.02):  # define the initialization function
     classname = m.__class__.__name__
-    if hasattr(m, "weight") and (classname.find("Conv") != -1 or classname.find("Linear") != -1):
-        if Initializer.NORMAL == init_type:
-            nn.init.normal_(m.weight.data, mean=0.0, std=gain)
+    if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+        if init_type == 'normal':
+            nn.init.normal_(m.weight.data, 0.0, init_gain)
         elif init_type == 'xavier':
-            nn.init.xavier_normal_(m.weight.data, gain=gain)
+            nn.init.xavier_normal_(m.weight.data, gain=init_gain)
         elif init_type == 'kaiming':
             nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
         elif init_type == 'orthogonal':
-            nn.init.orthogonal_(m.weight.data, gain=gain)
+            nn.init.orthogonal_(m.weight.data, gain=init_gain)
         else:
             raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
         if hasattr(m, 'bias') and m.bias is not None:
             nn.init.constant_(m.bias.data, 0.0)
     elif classname.find('BatchNorm2d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
-        nn.init.normal_(m.weight.data, mean=1.0, std=gain)
+        nn.init.normal_(m.weight.data, 1.0, init_gain)
         nn.init.constant_(m.bias.data, 0.0)
 
 
@@ -105,76 +86,7 @@ def set_requires_grad(nets, requires_grad):
             param.requires_grad = requires_grad
 
 
-class CycleGanModel(LightningModule):
-    """
-    CycleGAN paper: https://arxiv.org/pdf/1703.10593.pdf
-    Args:
-        input_channels: default=3
-        expanded_channels: default=64
-
-
-    For CycleGAN, in addition to GAN losses, we introduce lambda_A, lambda_B, and lambda_identity for the following losses.
-    A (source domain), B (target domain).
-    Generators: G_A: A -> B; G_B: B -> A.
-    Discriminators: D_A: G_A(A) vs. B; D_B: G_B(B) vs. A.
-    Forward cycle loss:  lambda_A * ||G_B(G_A(A)) - A|| (Eqn. (2) in the paper)
-    Backward cycle loss: lambda_B * ||G_A(G_B(B)) - B|| (Eqn. (2) in the paper)
-    Identity loss (optional): lambda_identity * (||G_A(B) - B|| * lambda_B + ||G_B(A) - A|| * lambda_A) (Sec 5.2 "Photo generation from paintings" in the paper)
-    Dropout is not used in the original CycleGAN paper.
-
-    lambda_a: default=10.0 weight for cycle loss (A -> B -> A)
-    lambda_b: default=10.0 weight for cycle loss (B -> A -> B)
-    lambda_i: default=0.5 use identity mapping. 
-        Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. 
-        For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, 
-        please set lambda_identity = 0.1
-
-    lambda_gan: default=1.0  weight for GAN loss：GAN(G(X))
-    lambda_nce: default=1.0  weight for NCE loss: NCE(G(X), X)
-    lambda_sb: default=0.1  weight for SB loss
-    nce_idt: type= default= False, nargs=?, const=True  use NCE loss for identity mapping: NCE(G(Y), Y))
-    nce_layers: default=0,4,8,12,16  compute NCE loss on which layers
-        nce_includes_all_negatives_from_minibatch: type= default= False, nargs=?, const=True (used for single image translation) 
-        If True, include the negatives from the other samples of the minibatch when computing the contrastive loss. 
-        please see models/patchnce.py for more details.
-    netF: default=mlp_sample | sample, reshape, mlp_sample  how to downsample the feature map
-    netF_nc: default=256  number of channels for netF
-    nce_T: default=0.07  temperature for NCE loss
-    lmda: default=0.1  weight for SB loss
-    num_patches: default=256  number of patches per layer
-        flip_equivariance: default= False, nargs=?, const=True  Enforce flip-equivariance as additional regularization. It's used by FastCUT, but not CUT
-        pool_size: default=0  no image pooling
-
-    input_nc: default=3
-    output_nc: default=3
-    ngf: default=64  of gen filters in first conv layer
-    num_timesteps: default=5  of discrim filters in the first conv layer
-
-    embedding_type: default=positional | fourier, positional
-    emdedding_dim: default=512,
-    n_layers_D: default=3  only used if netD==n_layers
-    style_dim: default=512  only used if netD==n_layers
-    n_mlp: default=3  only used if netD==n_layers
-    normG: default=instance | instance, batch, none  instance normalization or batch normalization for G
-    normD: default=instance | instance, batch, none  instance normalization or batch normalization for D
-    init_type: default=xavier | normal, xavier, kaiming, orthogonal  network initialization
-    init_gain: default=0.02  scaling factor for normal, xavier and orthogonal.
-    no_dropout
-    std: default=0.25  scale of gaussian noise added to data
-    tau: default=0.01  entropy parameter
-    no_antialias: default=False  if specified, use stride=2 conv instead of antialiased-downsampling (sad)
-    no_antialias_up: default=False  if specified, use [upconv(learned filter)] instead of [upconv(hard-coded [1,3,3,1] filter), conv]
-    dataset_mode: default=unaligned | unaligned, aligned, single, colorization
-    stylegna2_G_num_downsampling: default=1  number of downsampling layers in stylegan2 generator
-    gpu_ids: default=0
-    gan_mode: default=lsgan | vanilla, lsgan | wgangp
-    lr: default=0.0002  initial learning rate for adam
-    beta1: default=0.5  momentum term of adam
-    beta2: default=0.999  momentum term of adam
-    pool_size: default=50  the size of image buffer that stores previously generated images
-    lr_policy: default=linear | linear, step, plateau, cosine
-    lr_decay_iters: default=50  multiply by a gamma every lr_decay_iters iterations
-    """
+class CutModel(LightningModule):
     def __init__(
         self,
         optimizer1: optim.Optimizer,
@@ -187,7 +99,6 @@ class CycleGanModel(LightningModule):
         lambda_i: float = 0.5,
         **kwargs
     ) -> None:
-        
         super().__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
@@ -202,6 +113,9 @@ class CycleGanModel(LightningModule):
 
         self.fake_pool_a = ImagePool(50)
         self.fake_pool_b = ImagePool(50)
+
+        criterion1 = GanLoss()
+        criterion2 = PatchNCELoss()
 
         fid = FrechetInceptionDistance(feature=64)
         kid = KernelInceptionDistance(feature=64)

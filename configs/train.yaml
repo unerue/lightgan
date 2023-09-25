@@ -2,15 +2,15 @@
 defaults:
   - _self_
   - data: default
-  - model: default
   - callbacks: default
-  - logger: null
   - trainer: default
   - paths: default
   - extras: default
   - hydra: default
-  - experiment: null
+  - model: null
+  - logger: null
   - debug: null
+  - experiment: null
 
 task_name: "train"
 tags: ["dev"]

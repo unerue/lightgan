@@ -2,6 +2,10 @@ import random
 import torch
 
 
+def custom_schedule(epoch):
+    return 1 - max(0, epoch + 1 - 100) / 101
+
+
 class ImagePool:
     """This class implements an image buffer that stores previously generated images.
 

@@ -1,0 +1,5 @@
+timer:
+  _target_: lightning.pytorch.callbacks.Timer
+  duration: "00:12:00:00"
+  interval: null
+  verbose: true

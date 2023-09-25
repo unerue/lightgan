@@ -1,10 +1,8 @@
 defaults:
-  # - model_checkpoint
-  # - early_stopping
+  - _self_
   - model_summary
   - rich_progress_bar
-  - mnist
-  - _self_
+  - log_samples
 
 # model_checkpoint:
 #   dirpath: ${paths.output_dir}/checkpoints

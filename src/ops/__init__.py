@@ -7,4 +7,5 @@ __all__ = [
     "ImagePool",
     "ResnetGenerator",
     "NLayerDiscriminator",
+    "custom_schedule",
 ]

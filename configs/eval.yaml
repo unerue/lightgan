@@ -1,3 +1,4 @@
+# @package _global_
 defaults:
   - _self_
   - data: default # choose datamodule with `test_dataloader()` for evaluation

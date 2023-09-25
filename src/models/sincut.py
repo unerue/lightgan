@@ -1,9 +1,9 @@
 import torch
 
-from .cut_model import CUTModel
+from .cut import CutModel
 
 
-class SinCUTModel(CUTModel):
+class SinCutModel(CutModel):
     """This class implements the single image translation model (Fig 9) of
     Contrastive Learning for Unpaired Image-to-Image Translation
     Taesung Park, Alexei A. Efros, Richard Zhang, Jun-Yan Zhu

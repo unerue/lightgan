@@ -1,0 +1,59 @@
+# @package _global_
+defaults:
+  - override /data: default
+  - override /model: default
+  - override /trainer: default
+  - override /callbacks: default
+  - override /logger: default
+
+tags: ["cyclegan"]
+test: false
+
+data:
+  _target_: src.datasets.UnalignedDataModule
+  data_dir: ${paths.data_dir}/horse2zebra
+  batch_size: 8
+  num_workers: 12
+  pin_memory: true
+
+model:
+  _target_: src.models.CycleGanModel
+  optimizer1:
+    _target_: torch.optim.Adam
+    _partial_: true
+    lr: 0.0002
+    betas: [0.5, 0.999]
+  optimizer2:
+    _target_: torch.optim.Adam
+    _partial_: true
+    lr: 0.0002
+    betas: [0.5, 0.999]
+  scheduler1:
+    _target_: torch.optim.lr_scheduler.LambdaLR
+    _partial_: true
+    lr_lambda:
+      _target_: src.ops.module_utils.custom_schedule
+      _partial_: true
+  scheduler2:
+    _target_: torch.optim.lr_scheduler.LambdaLR
+    _partial_: true
+    lr_lambda:
+      _target_: src.ops.module_utils.custom_schedule
+      _partial_: true
+
+  compile: false
+
+trainer:
+  max_epochs: 100
+  accelerator: gpu
+  devices: 1
+  check_val_every_n_epoch: 0
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "horse2zebra"
+
+callbacks:
+  model_summary:
+    max_depth: 3
