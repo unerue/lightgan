@@ -3,7 +3,8 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 import functools
-
+import math
+from torch.nn import init
 
 def get_pad_layer(pad_type):
     if(pad_type in ['refl', 'reflect']):
@@ -376,30 +377,37 @@ class TimestepEmbedding(nn.Module):
         return temb
 
 class NLayerDiscriminator_ncsn(nn.Module):
-    """Defines a PatchGAN discriminator"""
+    """Defines a PatchGAN discriminator
+    Construct a PatchGAN discriminator
+
+    Parameters:
+        input_nc (int)  -- the number of channels in input images
+        ndf (int)       -- the number of filters in the last conv layer
+        n_layers (int)  -- the number of conv layers in the discriminator
+        norm_layer      -- normalization layer
+    """
 
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, no_antialias=False):
-        """Construct a PatchGAN discriminator
-
-        Parameters:
-            input_nc (int)  -- the number of channels in input images
-            ndf (int)       -- the number of filters in the last conv layer
-            n_layers (int)  -- the number of conv layers in the discriminator
-            norm_layer      -- normalization layer
-        """
-        super(NLayerDiscriminator_ncsn, self).__init__()
+        super().__init__()
         if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
-        self.model_main = nn.ModuleList()
+        self.model_main = []
         kw = 4
         padw = 1
+
+        self.t_embed = TimestepEmbedding(
+            embedding_dim=4*ndf,
+            hidden_dim=4*ndf,
+            output_dim=4*ndf,
+            act=nn.LeakyReLU(0.2),
+        )
         if no_antialias:
             sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
         else:
             self.model_main.append(ConvBlock_cond(input_nc, ndf, 4*ndf,kernel_size=kw, stride=1, padding=padw,use_bias=use_bias))
-        
+
         nf_mult = 1
         nf_mult_prev = 1
          
@@ -424,18 +432,13 @@ class NLayerDiscriminator_ncsn(nn.Module):
             
         )
         self.final_conv =nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
-        self.t_embed = TimestepEmbedding(
-            embedding_dim=4*ndf,
-            hidden_dim=4*ndf,
-            output_dim=4*ndf,
-            act=nn.LeakyReLU(0.2),
-        )
+        self.model_main = nn.Sequential(*self.model_main)
 
-    def forward(self, input,t_emb,input2=None):
+    def forward(self, input, t_emb, input2=None):
         """Standard forward."""
         t_emb = self.t_embed(t_emb)
         if input2 is not None:
-            out = torch.cat([input,input2],dim=1)
+            out = torch.cat([input, input2], dim=1)
         else:
             
             out = input
