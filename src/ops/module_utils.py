@@ -1,5 +1,40 @@
 import random
+from enum import IntEnum
 import torch
+from torch import nn
+
+
+class Initializer(IntEnum):
+    NORMAL = 0
+    XAVIER_NORMAL = 1
+    KAIMING_NORMAL = 2
+    ORTHOGONAL = 3
+
+
+def initialize_weights(m: nn.Module, init_type: Initializer = 1, gain: float = 0.02):
+    """
+    define the initialization function
+    init_type: normal | xavier normal | kaiming normal | orthogonal
+    gain `` default to 0.02
+    """
+    classname = m.__class__.__name__
+    if hasattr(m, "weight") and (classname.find("Conv") != -1 or classname.find("Linear") != -1):
+        if Initializer.NORMAL == init_type:
+            nn.init.normal_(m.weight.data, mean=0.0, std=gain)
+        elif Initializer.XAVIER_NORMAL == init_type:
+            nn.init.xavier_normal_(m.weight.data, gain=gain)
+        elif Initializer.KAIMING_NORMAL == init_type:
+            nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+        elif Initializer.ORTHOGONAL == init_type:
+            nn.init.orthogonal_(m.weight.data, gain=gain)
+        else:
+            raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
+        if hasattr(m, "bias") and m.bias is not None:
+            nn.init.constant_(m.bias.data, 0.0)
+    # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+    elif classname.find("BatchNorm2d") != -1:
+        nn.init.normal_(m.weight.data, mean=1.0, std=gain)
+        nn.init.constant_(m.bias.data, 0.0)
 
 
 def custom_schedule(epoch):

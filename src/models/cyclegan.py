@@ -205,8 +205,8 @@ class CycleGanModel(LightningModule):
         self.fake_pool_a = ImagePool(50)
         self.fake_pool_b = ImagePool(50)
 
-        fid = FrechetInceptionDistance(feature=64)
-        kid = KernelInceptionDistance(feature=64)
+        # fid = FrechetInceptionDistance(feature=64)
+        # kid = KernelInceptionDistance(feature=64)
 
         image_shape = (3, 256, 256)
         self.example_input_array = (
@@ -217,7 +217,7 @@ class CycleGanModel(LightningModule):
 
     def forward(self, x, z):
         image_a, image_b = x, z
-        return self.g.x(image_a), self.g.y(image_b)
+        return self.g.x(image_a), self.g.y(image_b), self.d.x(image_a), self.d.y(image_b)
 
     def configure_optimizers(self) -> Any:
         optimizer_g = self.hparams.optimizer1(

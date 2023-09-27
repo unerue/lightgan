@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from packaging import version
 
 
-class GANLoss(nn.Module):
+class GanLoss(nn.Module):
     """Define different GAN objectives.
 
     The GANLoss class abstracts away the need to create the target label tensor
@@ -77,10 +77,17 @@ class GANLoss(nn.Module):
         return loss
 
 
-class PatchNCELoss(nn.Module):
-    def __init__(self, opt):
+class PatchNceLoss(nn.Module):
+    """
+    Args:
+        nce_t (float) temperature for NCE loss
+        nce_includes_all_negatives_from_minibatch (bool) whether to include negatives from other samples in the minibatch
+            (used for single image translation) If True, include the negatives from the other samples of the minibatch when computing the contrastive loss. Please see models/patchnce.py for more details.
+    """
+    def __init__(self, batch_size: int, nce_t: float = 0.07):
         super().__init__()
-        self.opt = opt
+        self.batch_size = batch_size
+        self.nce_t = nce_t
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction='none')
         self.mask_dtype = torch.uint8 if version.parse(torch.__version__) < version.parse('1.2.0') else torch.bool
 
@@ -105,11 +112,12 @@ class PatchNCELoss(nn.Module):
         # However, for single-image translation, the minibatch consists of
         # crops from the "same" high-resolution image.
         # Therefore, we will include the negatives from the entire minibatch.
-        if self.opt.nce_includes_all_negatives_from_minibatch:
+        nce_includes_all_negatives_from_minibatch = False
+        if nce_includes_all_negatives_from_minibatch:
             # reshape features as if they are all negatives of minibatch of size 1.
             batch_dim_for_bmm = 1
         else:
-            batch_dim_for_bmm = self.opt.batch_size
+            batch_dim_for_bmm = self.batch_size
 
         # reshape features to batch size
         feat_q = feat_q.view(batch_dim_for_bmm, -1, dim)
@@ -123,7 +131,7 @@ class PatchNCELoss(nn.Module):
         l_neg_curbatch.masked_fill_(diagonal, -10.0)
         l_neg = l_neg_curbatch.view(-1, npatches)
 
-        out = torch.cat((l_pos, l_neg), dim=1) / self.opt.nce_T
+        out = torch.cat((l_pos, l_neg), dim=1) / self.nce_t
 
         loss = self.cross_entropy_loss(
             out, 

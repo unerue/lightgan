@@ -4,9 +4,9 @@ defaults:
   - override /model: default
   - override /trainer: default
   - override /callbacks: default
-  - override /logger: default
+  # - override /logger: default
 
-tags: ["cyclegan"]
+tags: ["cut"]
 test: false
 
 data:
@@ -17,7 +17,8 @@ data:
   pin_memory: true
 
 model:
-  _target_: src.models.CycleGanModel
+  _target_: src.models.CutModel
+  batch_size: ${data.batch_size}
   optimizer1:
     _target_: torch.optim.Adam
     _partial_: true
@@ -56,4 +57,4 @@ logger:
 
 callbacks:
   model_summary:
-    max_depth: 3
+    max_depth: 2
