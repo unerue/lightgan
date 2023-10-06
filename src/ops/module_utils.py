@@ -2,6 +2,7 @@ import random
 from enum import IntEnum
 import torch
 from torch import nn
+from torch.optim.lr_scheduler import _LRScheduler
 
 
 class Initializer(IntEnum):
@@ -35,6 +36,20 @@ def initialize_weights(m: nn.Module, init_type: Initializer = 1, gain: float = 0
     elif classname.find("BatchNorm2d") != -1:
         nn.init.normal_(m.weight.data, mean=1.0, std=gain)
         nn.init.constant_(m.bias.data, 0.0)
+
+
+def set_requires_grad(nets: nn.Module, requires_grad: bool = False):
+    """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
+    Parameters:
+        nets (network list)   -- a list of networks
+        requires_grad (bool)  -- whether the networks require gradients or not
+    """
+    if not isinstance(nets, list):
+        nets = [nets]
+    for net in nets:
+        if net is not None:
+            for param in net.parameters():
+                param.requires_grad = requires_grad
 
 
 def custom_schedule(epoch):
@@ -99,3 +114,70 @@ class ImagePool:
         # collect all the images and return
         return_images = torch.cat(return_images, 0)
         return return_images
+
+
+class LinearDecayLR(_LRScheduler):
+    """
+    Custom LR Scheduler which linearly decay to a target learning rate.
+
+    override 해줘야 하는 부분은 get_lr, _get_closed_form_lr
+    """
+    def __init__(
+        self,
+        optimizer,
+        initial_lr: float,
+        target_lr: float,
+        total_iters: int,
+        last_epoch: int = -1,
+        verbose: bool = False
+    ) -> None:
+        if initial_lr < 0:
+            raise ValueError("Initial Learning rate expected to be a non-negative integer.")
+            
+        if target_lr < 0:
+            raise ValueError("Target Learning rate expected to be a non-negative integer.")
+
+        if target_lr > initial_lr:
+            raise ValueError("Target Learning Rate must be larger than Initial Learning Rate.")
+
+        self.init_lr = initial_lr
+        self.target_lr = target_lr
+        self.total_iters = total_iters
+        self.subtract_lr = self._get_decay_constant()
+        super().__init__(optimizer, last_epoch, verbose) # 부모클래스의 init에 필요한 arg 넘겨줌.
+                    
+    def _get_decay_constant(self):
+        return float((self.init_lr - self.target_lr) / self.total_iters)
+        
+    def get_lr(self):
+        # if not self._get_lr_called_within_step:
+            # warnings.warn("To get the learning rate computed by the scheduler, "
+            #             "please use 'get_last_lr()'.", UserWarning)
+
+        return [group['lr']-self.subtract_lr for group in self.optimizer.param_groups]
+    
+
+class DelayedLinearDecayLR(LinearDecayLR):
+    def __init__(
+        self,
+        optimizer,
+        initial_lr: float,
+        target_lr: float,
+        total_iters:int,
+        last_epoch:int=-1,
+        decay_after:int=100,
+        verbose:bool=False
+    ) -> None:
+        self.decay_after = decay_after
+        super().__init__(optimizer, initial_lr, target_lr, total_iters, last_epoch, verbose)
+
+    def get_lr(self):
+        # if not self._get_lr_called_within_step:
+            # warnings.warn("To get the learning rate computed by the scheduler, "
+            #             "please use 'get_last_lr()'.", UserWarning)
+
+        # 여기에 total iter도 고려해줘야함.
+        if self.decay_after <= self.last_epoch < (self.decay_after + self.total_iters):
+            return [group['lr'] - self.subtract_lr for group in self.optimizer.param_groups]
+        else:
+            return [group['lr'] for group in self.optimizer.param_groups]

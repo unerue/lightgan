@@ -2,6 +2,14 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from packaging import version
+from enum import IntEnum
+
+
+class GanMode(IntEnum):
+    LSGAN = 0
+    VANILLA = 1
+    WGAN_GP = 2
+    NON_SATURATING = 3
 
 
 class GanLoss(nn.Module):
@@ -21,8 +29,8 @@ class GanLoss(nn.Module):
     """
     def __init__(self, gan_mode, target_real_label=1.0, target_fake_label=0.0):
         super().__init__()
-        self.register_buffer('real_label', torch.tensor(target_real_label))
-        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        self.register_buffer("real_label", torch.tensor(target_real_label))
+        self.register_buffer("fake_label", torch.tensor(target_fake_label))
         self.gan_mode = gan_mode
         if gan_mode == 'lsgan':
             self.loss = nn.MSELoss()
@@ -31,26 +39,26 @@ class GanLoss(nn.Module):
         elif gan_mode in ['wgangp', 'nonsaturating']:
             self.loss = None
         else:
-            raise NotImplementedError('gan mode %s not implemented' % gan_mode)
+            raise NotImplementedError(f"gan mode {gan_mode} not implemented")
 
-    def get_target_tensor(self, prediction, target_is_real):
+    def get_target_tensor(self, inputs, real: bool):
         """Create label tensors with the same size as the input.
 
         Parameters:
-            prediction (tensor) - - tpyically the prediction from a discriminator
-            target_is_real (bool) - - if the ground truth label is for real images or fake images
+            inputs (tensor) - - tpyically the prediction from a discriminator
+            real (bool) - - if the ground truth label is for real images or fake images
 
         Returns:
             A label tensor filled with ground truth label, and with the size of the input
         """
 
-        if target_is_real:
+        if real:
             target_tensor = self.real_label
         else:
             target_tensor = self.fake_label
-        return target_tensor.expand_as(prediction)
+        return target_tensor.expand_as(inputs)
 
-    def __call__(self, prediction, target_is_real):
+    def __call__(self, inputs, real: bool):
         """Calculate loss given Discriminator's output and grount truth labels.
 
         Parameters:
@@ -60,20 +68,20 @@ class GanLoss(nn.Module):
         Returns:
             the calculated loss.
         """
-        bs = prediction.size(0)
+        bs = inputs.size(0)
         if self.gan_mode in ['lsgan', 'vanilla']:
-            target_tensor = self.get_target_tensor(prediction, target_is_real)
-            loss = self.loss(prediction, target_tensor)
+            target_tensor = self.get_target_tensor(inputs, real)
+            loss = self.loss(inputs, target_tensor)
         elif self.gan_mode == 'wgangp':
-            if target_is_real:
-                loss = -prediction.mean()
+            if real:
+                loss = -inputs.mean()
             else:
-                loss = prediction.mean()
+                loss = inputs.mean()
         elif self.gan_mode == 'nonsaturating':
-            if target_is_real:
-                loss = F.softplus(-prediction).view(bs, -1).mean(dim=1)
+            if real:
+                loss = F.softplus(-inputs).view(bs, -1).mean(dim=1)
             else:
-                loss = F.softplus(prediction).view(bs, -1).mean(dim=1)
+                loss = F.softplus(inputs).view(bs, -1).mean(dim=1)
         return loss
 
 

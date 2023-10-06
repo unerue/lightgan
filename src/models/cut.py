@@ -20,19 +20,6 @@ from ..ops import (
 )
 
 
-def cyclegan_mse_loss(preds, label: str):
-    if label.lower() == "real":
-        target = torch.ones_like(preds)
-    else:
-        target = torch.zeros_like(preds)
-    return F.mse_loss(preds, target)
-
-
-def set_requires_grad(nets, requires_grad):
-    for net in nets:
-        for param in net.parameters():
-            param.requires_grad = requires_grad
-
 
 class CutModel(LightningModule):
     """
@@ -45,6 +32,8 @@ class CutModel(LightningModule):
     """
     def __init__(
         self,
+        generator: nn.Module,
+        discriminator: nn.Module,
         optimizer1: optim.Optimizer,
         optimizer2: optim.Optimizer,
         scheduler1: Optional[Any] = None,
@@ -54,11 +43,14 @@ class CutModel(LightningModule):
         lambda_b: float = 10.0,
         lambda_i: float = 0.5,
         lambda_nce: float = 1.0,  # fastcut 10.0
-        lambda_gan: float = 1.0,
+        nce_layers: list[int] = [0, 4, 8, 12, 16],
+        lambda_n: float = 1.0,
+        lambda_g: float = 1.0,
         nce_idt: bool = True,  # fastcut False
         pool_size: int = 0,
         num_patches: int = 256,
         batch_size: int = 1,
+        image_shape: tuple[int, int, int] = (3, 256, 256),
         **kwargs
     ) -> None:
         super().__init__()
@@ -89,10 +81,8 @@ class CutModel(LightningModule):
             no_antialias=True,
         )
 
-
-        self.g.apply(initialize_weights)
-        # self.f.apply(initialize_weights)
-        self.d.apply(initialize_weights)
+        initialize_weights(self.g, init_type=init_type, gain=init_gain)
+        initialize_weights(self.d, init_type=init_type, gain=init_gain)
 
         # self.fake_pool_a = ImagePool(0)
         # self.fake_pool_b = ImagePool(0)
@@ -106,7 +96,6 @@ class CutModel(LightningModule):
         # fid = FrechetInceptionDistance(feature=64)
         # kid = KernelInceptionDistance(feature=64)
 
-        image_shape = (3, 256, 256)
         self.example_input_array = (
             torch.zeros((1, *image_shape)), torch.zeros((1, *image_shape))
         )
@@ -124,28 +113,38 @@ class CutModel(LightningModule):
         if self.hparams.scheduler1 is not None and self.hparams.scheduler2 is not None:
             scheduler_g = self.hparams.scheduler1(optimizer_g)
             scheduler_d = self.hparams.scheduler2(optimizer_d)
-            return [optimizer_g, optimizer_d], [scheduler_g, scheduler_d]
+            return [
+                {
+                    "optimizer": optimizer_g,
+                    "lr_scheduler":
+                        {"scheduler": scheduler_g, "interval": "epoch"}
+                },
+                {
+                    "optimizer": optimizer_d,
+                    "lr_scheduler": 
+                        {"scheduler": scheduler_d, "interval": "epoch"}
+                }
+            ]
 
         return [optimizer_g, optimizer_d], []
 
-    def calculate_nce_loss(self, src, tgt):
-        n_layers = len(self.nce_layers)
-        # print(src.shape, tgt.shape)
-        feat_q = self.g(tgt, self.nce_layers, encode_only=True)
+    def calculate_nce_loss(self, source, target):
+        num_layers = len(self.nce_layers)
+        feat_q = self.g(target, self.nce_layers, encode_only=True)
 
         # if self.opt.flip_equivariance and self.flipped_for_equivariance:
         #     feat_q = [torch.flip(fq, [3]) for fq in feat_q]
 
-        feat_k = self.g(src, self.nce_layers, encode_only=True)
+        feat_k = self.g(source, self.nce_layers, encode_only=True)
         feat_k_pool, sample_ids = self.f(feat_k, self.hparams.num_patches, None)
         feat_q_pool, _ = self.f(feat_q, self.hparams.num_patches, sample_ids)
 
         total_nce_loss = 0.0
-        for f_q, f_k, crit, _ in zip(feat_q_pool, feat_k_pool, self.criterion_nce, self.nce_layers):
-            loss = crit(f_q, f_k) * self.hparams.lambda_nce
+        for f_q, f_k, criterion, _ in zip(feat_q_pool, feat_k_pool, self.criterion_nce, self.nce_layers):
+            loss = criterion(f_q, f_k) * self.hparams.lambda_nce
             total_nce_loss += loss.mean()
 
-        return total_nce_loss / n_layers
+        return total_nce_loss / num_layers
 
 
     def generator_training_step(self, image_a, image_b):
@@ -195,7 +194,10 @@ class CutModel(LightningModule):
         self.fakes = self.g(reals)
         self.fake_b = self.fakes[:image_a.size(0)]
 
-        optimizer_g, optimizer_d = self.optimizers()
+        if self.hparams.nce_identity:
+            idt_b = self.fakes[image_a.size(0):]
+
+        optimizer_g, optimizer_d, optimizer_f = self.optimizers()
         # scheduler_g, scheduler_d = self.lr_schedulers()
 
         # if self.hparams.lambda_nce > 0:
@@ -206,28 +208,30 @@ class CutModel(LightningModule):
         d_loss = self.discriminator_training_step(image_a, image_b)
         self.manual_backward(d_loss)
         optimizer_d.step()
-        # scheduler_d.step()
         self.untoggle_optimizer(optimizer_d)
 
         self.toggle_optimizer(optimizer_g)
         optimizer_g.zero_grad()
-        # optimizer_f.zero_grad()
+        optimizer_f.zero_grad()
         g_loss = self.generator_training_step(image_a, image_b)
         self.manual_backward(g_loss)
         optimizer_g.step()
-        # optimizer_f.step()
-        # scheduler_g.step()
+        optimizer_f.step()
         self.untoggle_optimizer(optimizer_g)
 
-
-
         if len(self.training_step_outputs) < 7:
-            fake_b = self.g(image_a).detach()
+            with torch.no_grad():
+                fake_b = self.g(image_a).detach()
+                self.training_step_outputs.append(image_a)
+                self.training_step_outputs2.append(fake_b)
 
-            # fake_a = self.g.y(image_b).detach()
-            # reco_b = self.g.x(fake_a).detach()
-            self.training_step_outputs.append(image_a)
-            self.training_step_outputs2.append(fake_b)
+    def on_train_epoch_end(self) -> None:
+        scheduler_g, scheduler_d = self.lr_schedulers()
+        scheduler_g.step()
+        scheduler_d.step()
+        # If the selected scheduler is a ReduceLROnPlateau scheduler.
+        if isinstance(scheduler_g, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler_g.step(self.trainer.callback_metrics["loss"])
 
 
 if __name__ == "__main__":

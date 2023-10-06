@@ -18,6 +18,42 @@ data:
 
 model:
   _target_: src.models.CycleGanModel
+  image_shape: [3, 256, 256]
+  lambda_a: 10.0
+  lambda_b: 10.0
+  lambda_i: 0.5
+  pool_size: 50
+
+  generator:
+    _target_: src.models.cyclegan.Generator
+    in_channels: 3
+    out_channels: 3
+    expanded_channels: 64
+    norm_layer: 
+      _target_: torch.nn.BatchNorm2d
+      # _target_: torch.nn.InstanceNorm2d
+      _partial_: true
+    num_blocks: 9
+    padding_layer:
+      _target_: torch.nn.ReflectionPad2d
+      _partial_: true
+    no_antialias: false
+    no_antialias_up: false
+    use_bias: false
+    # use_bias: true
+    use_dropout: false
+
+  discriminator:
+    _target_: src.models.cyclegan.Discriminator
+    in_channels: 3
+    expanded_channels: 64
+    num_layers: 3
+    norm_layer:
+      _target_: torch.nn.BatchNorm2d
+      # _target_: torch.nn.InstanceNorm2d
+      _partial_: true
+    no_antialias: false
+
   optimizer1:
     _target_: torch.optim.Adam
     _partial_: true
@@ -28,26 +64,31 @@ model:
     _partial_: true
     lr: 0.0002
     betas: [0.5, 0.999]
-  scheduler1:
-    _target_: torch.optim.lr_scheduler.LambdaLR
-    _partial_: true
-    lr_lambda:
-      _target_: src.ops.module_utils.custom_schedule
-      _partial_: true
-  scheduler2:
-    _target_: torch.optim.lr_scheduler.LambdaLR
-    _partial_: true
-    lr_lambda:
-      _target_: src.ops.module_utils.custom_schedule
-      _partial_: true
 
-  compile: false
+  scheduler1:
+    _target_: src.ops.DelayedLinearDecayLR
+    _partial_: true
+    initial_lr: 0.0002
+    target_lr: 0.0001
+    decay_after: 50
+    total_iters: 100
+  scheduler2:
+    _target_: src.ops.DelayedLinearDecayLR
+    _partial_: true
+    initial_lr: 0.0002
+    target_lr: 0.0001
+    decay_after: 50
+    total_iters: 100
 
 trainer:
   max_epochs: 100
   accelerator: gpu
   devices: 1
-  check_val_every_n_epoch: 0
+  check_val_every_n_epoch: 1
+  precision: "16-mixed"
+  enable_model_summary: false
+  num_sanity_val_steps: 2
+  fast_dev_run: false
 
 logger:
   wandb:
@@ -56,4 +97,4 @@ logger:
 
 callbacks:
   model_summary:
-    max_depth: 3
+    max_depth: 2

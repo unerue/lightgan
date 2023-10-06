@@ -56,7 +56,7 @@ def _make_power_2(img: Image, base: int = 4, method=Image.BICUBIC):
 
 
 def get_transform(
-    resize: int = 286, crop_size: int = 256, grayscale: bool = False
+    resize: int = 286, crop_size: int = 256, grayscale: bool = False, train: bool = True
 ):
     """
     preprocessing = resize_and_crop
@@ -64,13 +64,11 @@ def get_transform(
     return -1 to 1
     """
     transform_list = []
-    transform_list.append(transforms.Resize(resize))
-    transform_list.append(transforms.RandomCrop(crop_size))
-    # transform_list.append(
-    #     transforms.Lambda(lambda img: _make_power_2(img, base=4, method=method))
-    # )
+    if train:
+        transform_list.append(transforms.Resize(resize))
+        transform_list.append(transforms.RandomCrop(crop_size))
+        transform_list.append(transforms.RandomHorizontalFlip())
 
-    transform_list.append(transforms.RandomHorizontalFlip())
     transform_list += [transforms.ToTensor()]
     if grayscale:
         transform_list += [transforms.Normalize((0.5,), (0.5,))]
@@ -109,6 +107,8 @@ class UnalignedDataset(Dataset):
         self.a_size = len(self.a_paths)  # get the size of dataset A
         self.b_size = len(self.b_paths)  # get the size of dataset B
 
+        self.is_train = phase == "train"
+
     def __getitem__(self, index: int):
         """Return a data point and its metadata information.
 
@@ -140,7 +140,7 @@ class UnalignedDataset(Dataset):
         # )
 
         # load_size = self.opt.crop_size if is_finetuning else self.opt.load_size,
-        transform = get_transform(286, 256)
+        transform = get_transform(286, 256, train=self.is_train)
         a_img = transform(a_img)
         b_img = transform(b_img)
 
@@ -181,6 +181,7 @@ class UnalignedDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.trainset = UnalignedDataset(self.hparams.data_dir, phase="train")
+        self.validset = UnalignedDataset(self.hparams.data_dir, phase="test")
         # if not self.trainset and not self.validset and not self.testset:
         #     trainset = MNIST(self.hparams.data_dir, train=True, transform=self.transforms)
         #     testset = MNIST(self.hparams.data_dir, train=False, transform=self.transforms)
@@ -200,9 +201,14 @@ class UnalignedDataModule(LightningDataModule):
             shuffle=True,
         )
 
-    # def val_dataloader(self) -> DataLoader[Any]:
-    #     return
-
+    def val_dataloader(self) -> DataLoader[Any]:
+        return DataLoader(
+            dataset=self.validset,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
     # def test_dataloader(self) -> DataLoader[Any]:
     #     return
 

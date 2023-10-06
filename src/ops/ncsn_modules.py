@@ -6,6 +6,7 @@ import functools
 import math
 from torch.nn import init
 
+
 def get_pad_layer(pad_type):
     if(pad_type in ['refl', 'reflect']):
         PadLayer = nn.ReflectionPad2d
@@ -38,6 +39,7 @@ def get_filter(filt_size=3):
     filt = filt / torch.sum(filt)
 
     return filt
+
 
 class Downsample(nn.Module):
     def __init__(self, channels, pad_type='reflect', filt_size=3, stride=2, pad_off=0):
@@ -82,6 +84,7 @@ class AdaptiveLayer(nn.Module):
         out = gamma * input + beta
 
         return out
+
 
 class ResnetBlock_cond(nn.Module):
     """Define a Resnet block"""

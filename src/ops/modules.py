@@ -6,6 +6,7 @@ from torch import nn, FloatTensor
 import torch.nn.functional as F
 from torchvision import ops
 import math
+from .module_utils import initialize_weights
 
 
 filer_sizes = {
@@ -273,18 +274,17 @@ class ResnetBlock(nn.Module):
     def __init__(
         self,
         dim: int,
-        padding_type,
-        pad_layer: Callable[..., nn.Module] = nn.ReflectionPad2d,
+        padding_layer: Callable[..., nn.Module] = nn.ReflectionPad2d,
         norm_layer: Callable[..., nn.Module] = nn.BatchNorm2d,
         use_dropout: bool = True,
         use_bias: bool = True
     ) -> None:
         super().__init__()
         self.conv_block = self.build_conv_block(
-            dim, padding_type, norm_layer, use_dropout, use_bias
+            dim, padding_layer, norm_layer, use_dropout, use_bias
         )
 
-    def build_conv_block(self, dim, padding_type, norm_layer, use_dropout, use_bias):
+    def build_conv_block(self, dim, padding_layer, norm_layer, use_dropout, use_bias):
         """Construct a convolutional block.
 
         Parameters:
@@ -298,7 +298,7 @@ class ResnetBlock(nn.Module):
         """
         conv_block = []
         p = 0
-        conv_block += [nn.ReflectionPad2d(1)]
+        conv_block += [padding_layer(1)]
         # if padding_type == "reflect":
         #     conv_block += [nn.ReflectionPad2d(1)]
         # elif padding_type == "replicate":
@@ -315,16 +315,21 @@ class ResnetBlock(nn.Module):
         # ]
         conv_block += [
             ops.Conv2dNormActivation(
-                dim, dim, kernel_size=3, padding=0, 
-                norm_layer=norm_layer, activation_layer=nn.ReLU,
-                inplace=True, bias=use_bias
+                dim, 
+                dim,
+                kernel_size=3,
+                padding=0, 
+                norm_layer=norm_layer,
+                activation_layer=nn.ReLU,
+                inplace=True,
+                bias=use_bias
             ),
         ]
         if use_dropout:
             conv_block += [nn.Dropout(0.5)]
 
         p = 0
-        conv_block += [nn.ReflectionPad2d(1)]
+        conv_block += [padding_layer(1)]
         # if padding_type == "reflect":
         #     conv_block += [nn.ReflectionPad2d(1)]
         # elif padding_type == "replicate":
@@ -335,8 +340,7 @@ class ResnetBlock(nn.Module):
         #     raise NotImplementedError("padding [%s] is not implemented" % padding_type)
         conv_block += [
             nn.Conv2d(dim, dim, kernel_size=3, padding=0, bias=use_bias),
-            # norm_layer(dim),
-            nn.InstanceNorm2d(dim)
+            norm_layer(dim),
         ]
 
         return nn.Sequential(*conv_block)
@@ -364,16 +368,17 @@ class ResnetGenerator(nn.Module):
     """
     def __init__(
         self,
-        input_nc,
-        output_nc,
-        ngf=64,
-        norm_layer=nn.BatchNorm2d,
+        in_channels,
+        out_channels: int = 3,
+        expanded_channels=64,
+        norm_layer=nn.InstanceNorm2d,
         use_dropout=False,
         num_blocks=6,
-        padding_type="reflect",
+        padding_layer=nn.ReflectionPad2d,
         no_antialias=False,
         no_antialias_up=False,
-        use_bias=True
+        use_bias=True,
+        num_downsamples: int = 2,
     ) -> None:
         super().__init__()
         assert num_blocks >= 0
@@ -381,8 +386,8 @@ class ResnetGenerator(nn.Module):
         model = [
             nn.ReflectionPad2d(padding=3),
             ops.Conv2dNormActivation(
-                input_nc,
-                ngf,
+                in_channels,
+                expanded_channels,
                 kernel_size=7,
                 padding=0,
                 norm_layer=norm_layer,
@@ -391,14 +396,13 @@ class ResnetGenerator(nn.Module):
                 bias=use_bias,
             )
         ]
-        num_downsamples = 2
         for i in range(num_downsamples):
             mult = 2 ** i
             if no_antialias:
                 model += [
                     ops.Conv2dNormActivation(
-                        ngf * mult,
-                        ngf * mult * 2,
+                        expanded_channels * mult,
+                        expanded_channels * mult * 2,
                         kernel_size=3,
                         stride=2,
                         padding=1,
@@ -411,8 +415,8 @@ class ResnetGenerator(nn.Module):
             else:
                 model += [
                     ops.Conv2dNormActivation(
-                        ngf * mult,
-                        ngf * mult * 2,
+                        expanded_channels * mult,
+                        expanded_channels * mult * 2,
                         kernel_size=3,
                         stride=1,
                         padding=1,
@@ -421,15 +425,15 @@ class ResnetGenerator(nn.Module):
                         inplace=True,
                         bias=use_bias,
                     ),
-                    Downsample(ngf * mult * 2),
+                    Downsample(expanded_channels * mult * 2),
                 ]
 
         mult = num_downsamples ** 2
         for i in range(num_blocks):  # add ResNet blocks
             model += [
                 ResnetBlock(
-                    ngf * mult,
-                    padding_type=padding_type,
+                    expanded_channels * mult,
+                    padding_layer=padding_layer,
                     norm_layer=norm_layer,
                     use_dropout=use_dropout,
                     use_bias=use_bias,
@@ -440,23 +444,23 @@ class ResnetGenerator(nn.Module):
             if no_antialias_up:
                 model += [
                     nn.ConvTranspose2d(
-                        ngf * mult,
-                        int(ngf * mult / 2),
+                        expanded_channels * mult,
+                        int(expanded_channels * mult / 2),
                         kernel_size=3,
                         stride=2,
                         padding=1,
                         output_padding=1,
                         bias=use_bias,
                     ),
-                    norm_layer(int(ngf * mult / 2)),
+                    norm_layer(int(expanded_channels * mult / 2)),
                     nn.ReLU(True),
                 ]
             else:
                 model += [
-                    Upsample(ngf * mult),
+                    Upsample(expanded_channels * mult),
                     ops.Conv2dNormActivation(
-                        ngf * mult,
-                        int(ngf * mult / 2),
+                        expanded_channels * mult,
+                        int(expanded_channels * mult / 2),
                         kernel_size=3,
                         stride=1,
                         padding=1,
@@ -467,7 +471,7 @@ class ResnetGenerator(nn.Module):
                     )
                 ]
         model += [nn.ReflectionPad2d(3)]
-        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, stride=1, padding=0)]
+        model += [nn.Conv2d(expanded_channels, out_channels, kernel_size=7, stride=1, padding=0)]
         model += [nn.Tanh()]
 
         self.model = nn.Sequential(*model)
@@ -488,7 +492,6 @@ class ResnetGenerator(nn.Module):
                     # print("%d: skipping %s %d" % (layer_id, layer.__class__.__name__, feat.size(1)))
                     pass
                 if layer_id == layers[-1] and encode_only:
-                    # print('encoder only return features')
                     return feats  # return intermediate features alone; stop in the last layers
 
             return feat, feats  # return both output and intermediate features
@@ -502,11 +505,11 @@ class NLayerDiscriminator(nn.Module):
     """Defines a PatchGAN discriminator"""
     def __init__(
         self,
-        input_nc: int,
-        ndf: int = 64,
+        in_channels: int = 3,
+        expanded_channels: int = 64,
         num_layers: int = 3,
-        norm_layer: Callable[..., nn.Module]=nn.BatchNorm2d,
-        no_antialias=False,
+        norm_layer: Callable[..., nn.Module] = nn.InstanceNorm2d,
+        no_antialias: bool = False,
     ):
         """Construct a PatchGAN discriminator
 
@@ -517,9 +520,8 @@ class NLayerDiscriminator(nn.Module):
             norm_layer      -- normalization layer
         """
         super().__init__()
-        if (
-            type(norm_layer) == functools.partial
-        ):  # no need to use bias as BatchNorm2d has affine parameters
+        if type(norm_layer) == functools.partial:
+            # no need to use bias as BatchNorm2d has affine parameters
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
@@ -528,14 +530,14 @@ class NLayerDiscriminator(nn.Module):
         padw = 1
         if no_antialias:
             sequence = [
-                nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+                nn.Conv2d(in_channels, expanded_channels, kernel_size=4, stride=2, padding=1),
                 nn.LeakyReLU(0.2, True),
             ]
         else:
             sequence = [
-                nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=1, padding=padw),
+                nn.Conv2d(in_channels, expanded_channels, kernel_size=4, stride=1, padding=1),
                 nn.LeakyReLU(0.2, True),
-                Downsample(ndf),
+                Downsample(expanded_channels),
             ]
         nf_mult = 1
         nf_mult_prev = 1
@@ -545,74 +547,53 @@ class NLayerDiscriminator(nn.Module):
             if no_antialias:
                 sequence += [
                     nn.Conv2d(
-                        ndf * nf_mult_prev,
-                        ndf * nf_mult,
-                        kernel_size=kw,
+                        expanded_channels * nf_mult_prev,
+                        expanded_channels * nf_mult,
+                        kernel_size=4,
                         stride=2,
-                        padding=padw,
+                        padding=1,
                         bias=use_bias,
                     ),
-                    norm_layer(ndf * nf_mult),
+                    norm_layer(expanded_channels * nf_mult),
                     nn.LeakyReLU(0.2, True),
                 ]
             else:
                 sequence += [
                     nn.Conv2d(
-                        ndf * nf_mult_prev,
-                        ndf * nf_mult,
-                        kernel_size=kw,
+                        expanded_channels * nf_mult_prev,
+                        expanded_channels * nf_mult,
+                        kernel_size=4,
                         stride=1,
-                        padding=padw,
+                        padding=1,
                         bias=use_bias,
                     ),
-                    norm_layer(ndf * nf_mult),
+                    norm_layer(expanded_channels * nf_mult),
                     nn.LeakyReLU(0.2, True),
-                    Downsample(ndf * nf_mult),
+                    Downsample(expanded_channels * nf_mult),
                 ]
 
         nf_mult_prev = nf_mult
         nf_mult = min(2**num_layers, 8)
         sequence += [
             nn.Conv2d(
-                ndf * nf_mult_prev,
-                ndf * nf_mult,
-                kernel_size=kw,
+                expanded_channels * nf_mult_prev,
+                expanded_channels * nf_mult,
+                kernel_size=4,
                 stride=1,
-                padding=padw,
+                padding=1,
                 bias=use_bias,
             ),
-            norm_layer(ndf * nf_mult),
+            norm_layer(expanded_channels * nf_mult),
             nn.LeakyReLU(0.2, True),
         ]
 
         sequence += [
-            nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
+            nn.Conv2d(expanded_channels * nf_mult, 1, kernel_size=4, stride=1, padding=1)
         ]  # output 1 channel prediction map
         self.model = nn.Sequential(*sequence)
 
     def forward(self, input):
-        """Standard forward."""
         return self.model(input)
-
-
-def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[], debug=False, initialize_weights=True):
-    """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
-    Parameters:
-        net (network)      -- the network to be initialized
-        init_type (str)    -- the name of an initialization method: normal | xavier | kaiming | orthogonal
-        gain (float)       -- scaling factor for normal, xavier and orthogonal.
-        gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
-
-    Return an initialized network.
-    """
-    if len(gpu_ids) > 0:
-        assert(torch.cuda.is_available())
-        net.to(gpu_ids[0])
-        # if not amp:
-        # net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs for non-AMP training
-    if initialize_weights:
-        init_weights(net, init_type, init_gain=init_gain, debug=debug)
-    return net
 
 
 class Normalize(nn.Module):
@@ -631,10 +612,11 @@ class PatchSampleF(nn.Module):
     """CUT"""
     def __init__(
         self,
-        use_mlp=False,
-        init_type='normal',
+        use_mlp: bool = False,
+        init_type=0,
         init_gain=0.02,
         nc=256,
+        num_features: int = 256,
     ) -> None:
         # potential issues: currently, we use the same patch_ids for multiple images in the batch
         super().__init__()
@@ -644,23 +626,26 @@ class PatchSampleF(nn.Module):
         self.mlp_init = False
         self.init_type = init_type
         self.init_gain = init_gain
+        self.num_features = num_features
 
-    def create_mlp(self, feats):
-        for mlp_id, feat in enumerate(feats):
-            input_nc = feat.shape[1]
+    def create_mlp(self, features):
+        for mlp_id, feature in enumerate(features):
+            in_features = feature.shape[1]
             mlp = nn.Sequential(*[
-                nn.Linear(input_nc, self.nc),
+                nn.Linear(in_features, self.num_features),
                 nn.ReLU(),
-                nn.Linear(self.nc, self.nc)
+                nn.Linear(self.num_features, self.num_features)
             ])
-            mlp.cuda()
+            # mlp.cuda()
             # if len(self.gpu_ids) > 0:
             #     mlp.cuda()
-            setattr(self, 'mlp_%d' % mlp_id, mlp)
+            setattr(self, f"mlp_{mlp_id}", mlp)
+        
+        initialize_weights(self, self.init_type, self.init_gain)
         # init_net(self, self.init_type, self.init_gain, self.gpu_ids)
         self.mlp_init = True
 
-    def forward(self, feats, num_patches=64, patch_ids=None):
+    def forward(self, feats, num_patches: int = 64, patch_ids=None):
         # print(type(patch_ids))
         return_ids = []
         return_feats = []
@@ -686,12 +671,11 @@ class PatchSampleF(nn.Module):
                 x_sample = feat_reshape
                 patch_id = []
             if self.use_mlp:
-                mlp = getattr(self, 'mlp_%d' % feat_id)
+                mlp = getattr(self, f"mlp_{feat_id}")
                 # print(x_sample.device, mlp.device)
                 x_sample = mlp(x_sample)
             return_ids.append(patch_id)
             x_sample = self.l2norm(x_sample)
-
             if num_patches == 0:
                 x_sample = x_sample.permute(0, 2, 1).reshape([B, x_sample.shape[-1], H, W])
             return_feats.append(x_sample)

@@ -2,15 +2,16 @@ defaults:
   - _self_
   - model_summary
   - rich_progress_bar
-  # - log_samples
+  - log_samples
+  - learning_rate_monitor
 
-# model_checkpoint:
-#   dirpath: ${paths.output_dir}/checkpoints
-#   filename: "epoch_{epoch:03d}_valid_{val/acc:.4f}"
-#   monitor: "val/acc"
-#   mode: "max"
-#   save_last: True
-#   auto_insert_metric_name: False
+model_checkpoint:
+  dirpath: ${paths.output_dir}/checkpoints
+  filename: "epoch_{epoch:03d}_fid_{valid/fid:.4f}"
+  monitor: "valid/fid"
+  mode: "min"
+  save_last: True
+  auto_insert_metric_name: False
 
 # early_stopping:
 #   monitor: "val/acc"
