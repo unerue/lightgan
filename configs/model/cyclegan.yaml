@@ -12,7 +12,7 @@ test: false
 data:
   _target_: src.datasets.UnalignedDataModule
   data_dir: ${paths.data_dir}/horse2zebra
-  batch_size: 8
+  batch_size: 1
   num_workers: 12
   pin_memory: true
 
@@ -30,8 +30,8 @@ model:
     out_channels: 3
     expanded_channels: 64
     norm_layer: 
-      _target_: torch.nn.BatchNorm2d
-      # _target_: torch.nn.InstanceNorm2d
+      # _target_: torch.nn.BatchNorm2d
+      _target_: torch.nn.InstanceNorm2d
       _partial_: true
     num_blocks: 9
     padding_layer:
@@ -39,8 +39,8 @@ model:
       _partial_: true
     no_antialias: false
     no_antialias_up: false
-    use_bias: false
-    # use_bias: true
+    # use_bias: false
+    use_bias: true
     use_dropout: false
 
   discriminator:
@@ -49,8 +49,8 @@ model:
     expanded_channels: 64
     num_layers: 3
     norm_layer:
-      _target_: torch.nn.BatchNorm2d
-      # _target_: torch.nn.InstanceNorm2d
+      # _target_: torch.nn.BatchNorm2d
+      _target_: torch.nn.InstanceNorm2d
       _partial_: true
     no_antialias: false
 
@@ -77,11 +77,11 @@ model:
     _partial_: true
     initial_lr: 0.0002
     target_lr: 0.0001
-    decay_after: 50
-    total_iters: 100
+    decay_after: 100
+    total_iters: 200
 
 trainer:
-  max_epochs: 100
+  max_epochs: 200
   accelerator: gpu
   devices: 1
   check_val_every_n_epoch: 1

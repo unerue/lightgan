@@ -11,7 +11,17 @@
 * SBGAN (2023)
 * Image Style Transfer using CNN (2016): https://github.com/ali-gtw/ImageStyleTransfer-CNN
 
+## Lightning hooks
+
+* https://github.com/Lightning-AI/lightning/src/lightning/pytorch/core/hooks.py
+* https://lightning.ai/docs/pytorch/latest/common/trainer.html#trainer-class-api
+
+
 ## TODO or Check?
+
+* loss naming
+* 
+
 ### 2021
 * 1st: https://github.com/lyndonzheng/F-LSeSim 
 * NAVER: https://github.com/clovaai/tunit

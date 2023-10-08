@@ -137,7 +137,7 @@ class CycleGanModel(LightningModule):
         self.example_input_array = (
             torch.zeros((1, *image_shape)), torch.zeros((1, *image_shape))
         )
-        self.training_step_outputs = []
+        self.training_step_outputs1 = []
         self.training_step_outputs2 = []
 
         self.criterion_gan = GanLoss("lsgan")
@@ -202,7 +202,7 @@ class CycleGanModel(LightningModule):
         self.log("cycle_b", loss_cycle_b, prog_bar=True)
 
         g_loss = loss_d_x + loss_d_y + loss_cycle_a + loss_cycle_b + loss_i_a + loss_i_b
-        self.log("total_g_loss", g_loss, prog_bar=True)
+        self.log("g_loss", g_loss, prog_bar=True)
 
         return g_loss
 
@@ -249,13 +249,14 @@ class CycleGanModel(LightningModule):
         dx_loss, dy_loss = self.discriminator_training_step(image_a, image_b, fake_a, fake_b)
         self.manual_backward(dx_loss)
         self.manual_backward(dy_loss)
+        self.log("d_loss", dx_loss + dy_loss, prog_bar=True)
         optimizer_d.step()
         self.untoggle_optimizer(optimizer_d)
         
-        if len(self.training_step_outputs) < 7:
+        if len(self.training_step_outputs1) < 7:
             with torch.no_grad():
                 fake_b = self.g.x(image_a).detach()
-                self.training_step_outputs.append(image_a)
+                self.training_step_outputs1.append(image_a)
                 self.training_step_outputs2.append(fake_b)
 
     def on_train_epoch_end(self) -> None:

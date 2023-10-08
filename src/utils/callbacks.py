@@ -25,23 +25,28 @@ class InverseNormalize(transforms.Normalize):
 
 
 class LogPredictionSamples(Callback):
+    """
+    Args:
+        list[torch.Tensor], 0-255, shape (B, C, H, W)
+    """
     def on_train_epoch_end(self, trainer, pl_module):
-        # sample_imgs = pl_module.training_step_outputs[0].detach()
-        sample_imgs = pl_module.training_step_outputs[0]
-        sample_imgs2 = pl_module.training_step_outputs2[0]
-        # sample_imgs = pl_module.training_step_outputs[:6]
-        grid = torchvision.utils.make_grid(sample_imgs, 4)
-        grid = InverseNormalize()(grid)
-        grid = to_pil_image(grid)
-        grid2 = torchvision.utils.make_grid(sample_imgs2, 4)
-        grid2 = InverseNormalize()(grid2)
-        grid2 = to_pil_image(grid2)
+        if isinstance(pl_module.training_step_outputs1, list):
+            real_samples = torch.cat(pl_module.training_step_outputs1, dim=0)
+            fake_samples = torch.cat(pl_module.training_step_outputs2, dim=0)
+        
+        real_samples = torchvision.utils.make_grid(real_samples[:8], 4)
+        real_samples = InverseNormalize()(real_samples)
+        real_samples = to_pil_image(real_samples)
+
+        fake_samples = torchvision.utils.make_grid(fake_samples[:8], 4)
+        fake_samples = InverseNormalize()(fake_samples)
+        fake_samples = to_pil_image(fake_samples)
         trainer.logger.log_table(
             key="training samples",
             columns=["real", "fake"],
-            data=[[wandb.Image(grid), wandb.Image(grid2)]]
+            data=[[wandb.Image(real_samples), wandb.Image(fake_samples)]]
         )
-        pl_module.training_step_outputs.clear()
+        pl_module.training_step_outputs1.clear()
         pl_module.training_step_outputs2.clear()
 
     # def on_validation_epoch_end(self, trainer, pl_module):

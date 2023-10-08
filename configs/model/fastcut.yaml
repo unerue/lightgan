@@ -6,7 +6,7 @@ defaults:
   - override /callbacks: default
   - override /logger: default
 
-tags: ["cut"]
+tags: ["fastcut"]
 test: false
 
 data:
@@ -19,12 +19,12 @@ data:
 model:
   _target_: src.models.CutModel
   batch_size: ${data.batch_size}
-  flip_equivariance: false
+  flip_equivariance: true
   nce_layers: [0, 4, 8, 12, 16]
-  lambda_nce: 1.0
+  lambda_nce: 10.0
   nce_t: 0.07
   lambda_gan: 1.0
-  nce_idt: true
+  nce_idt: false
   optimizer1:
     _target_: torch.optim.Adam
     _partial_: true
@@ -46,27 +46,27 @@ model:
     initial_lr: 0.0002
     target_lr: 0.0001
     decay_after: 100
-    total_iters: 200
+    total_iters: ${trainer.max_epochs}
   scheduler2:
     _target_: src.ops.DelayedLinearDecayLR
     _partial_: true
     initial_lr: 0.0002
     target_lr: 0.0001
     decay_after: 100
-    total_iters: 200
+    total_iters: ${trainer.max_epochs}
   scheduler3:
     _target_: src.ops.DelayedLinearDecayLR
     _partial_: true
     initial_lr: 0.0002
     target_lr: 0.0001
     decay_after: 100
-    total_iters: 200
+    total_iters: ${trainer.max_epochs}
 
   image_shape: [3, 256, 256]
   compile: false
 
 trainer:
-  max_epochs: 200
+  max_epochs: 150
   accelerator: gpu
   devices: 1
   check_val_every_n_epoch: 1
