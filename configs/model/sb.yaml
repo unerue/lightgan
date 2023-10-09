@@ -13,12 +13,23 @@ data:
   _target_: src.datasets.UnalignedDataModule
   data_dir: ${paths.data_dir}/horse2zebra
   batch_size: 1
-  num_workers: 1
+  num_workers: 4
   pin_memory: true
 
 model:
   _target_: src.models.SbModel
   batch_size: ${data.batch_size}
+  flip_equivariance: false
+  nce_layers: [0, 4, 8, 12, 16]
+  lambda_nce: 1.0
+  lambda_sb: 1.0
+  expended_channels: 64
+  nce_idt: true
+  num_timesteps: 5
+  tau: 0.01
+  nce_t: 0.07
+  lambda_gan: 1.0
+
   optimizer1:
     _target_: torch.optim.Adam
     _partial_: true
@@ -29,26 +40,44 @@ model:
     _partial_: true
     lr: 0.0002
     betas: [0.5, 0.999]
+  optimizer3:
+    _target_: torch.optim.Adam
+    _partial_: true
+    lr: 0.0002
+    betas: [0.5, 0.999]
   scheduler1:
-    _target_: torch.optim.lr_scheduler.LambdaLR
+    _target_: src.ops.DelayedLinearDecayLR
     _partial_: true
-    lr_lambda:
-      _target_: src.ops.module_utils.custom_schedule
-      _partial_: true
+    initial_lr: 0.0002
+    target_lr: 0.0001
+    decay_after: 100
+    total_iters: 200
   scheduler2:
-    _target_: torch.optim.lr_scheduler.LambdaLR
+    _target_: src.ops.DelayedLinearDecayLR
     _partial_: true
-    lr_lambda:
-      _target_: src.ops.module_utils.custom_schedule
-      _partial_: true
+    initial_lr: 0.0002
+    target_lr: 0.0001
+    decay_after: 100
+    total_iters: 200
+  scheduler3:
+    _target_: src.ops.DelayedLinearDecayLR
+    _partial_: true
+    initial_lr: 0.0002
+    target_lr: 0.0001
+    decay_after: 100
+    total_iters: 200
 
+  image_shape: [3, 256, 256]
   compile: false
 
 trainer:
-  max_epochs: 100
+  max_epochs: 200
   accelerator: gpu
   devices: 1
-  check_val_every_n_epoch: 0
+  check_val_every_n_epoch: 1
+  enable_model_summary: false
+  num_sanity_val_steps: 2
+  fast_dev_run: false
 
 logger:
   wandb:
@@ -57,4 +86,4 @@ logger:
 
 callbacks:
   model_summary:
-    max_depth: 2
+    max_depth: 1

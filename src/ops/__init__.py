@@ -24,4 +24,7 @@ __all__ = [
     "Encoder",
     "Decoder",
     "MultiScaleDiscriminator",
+    "CondResnetBlock",
+    "NcsnResnetGenerator",
+    "NcsnNLayerDiscriminator",
 ]

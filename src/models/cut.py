@@ -109,7 +109,6 @@ class CutModel(LightningModule):
         return_list.append({"optimizer": optimizer_g})
         return_list.append({"optimizer": optimizer_d})
 
-
         if self.hparams.scheduler1 is not None and self.hparams.scheduler2 is not None:
             scheduler_g = self.hparams.scheduler1(optimizer_g)
             scheduler_d = self.hparams.scheduler2(optimizer_d)
