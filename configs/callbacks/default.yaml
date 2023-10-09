@@ -10,8 +10,8 @@ model_checkpoint:
   filename: "epoch_{epoch:03d}_fid_{valid/fid:.4f}"
   monitor: "valid/fid"
   mode: "min"
-  save_last: True
-  auto_insert_metric_name: False
+  save_last: true
+  auto_insert_metric_name: false
 
 # early_stopping:
 #   monitor: "val/acc"

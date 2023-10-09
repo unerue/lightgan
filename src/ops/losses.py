@@ -92,10 +92,11 @@ class PatchNceLoss(nn.Module):
         nce_includes_all_negatives_from_minibatch (bool) whether to include negatives from other samples in the minibatch
             (used for single image translation) If True, include the negatives from the other samples of the minibatch when computing the contrastive loss. Please see models/patchnce.py for more details.
     """
-    def __init__(self, batch_size: int, nce_t: float = 0.07):
+    def __init__(self, batch_size: int, nce_t: float = 0.07, nce_includes_all_negatives_from_minibatch: bool = False):
         super().__init__()
         self.batch_size = batch_size
         self.nce_t = nce_t
+        self.nce_includes_all_negatives_from_minibatch = nce_includes_all_negatives_from_minibatch
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction='none')
         self.mask_dtype = torch.uint8 if version.parse(torch.__version__) < version.parse('1.2.0') else torch.bool
 
@@ -120,8 +121,7 @@ class PatchNceLoss(nn.Module):
         # However, for single-image translation, the minibatch consists of
         # crops from the "same" high-resolution image.
         # Therefore, we will include the negatives from the entire minibatch.
-        nce_includes_all_negatives_from_minibatch = False
-        if nce_includes_all_negatives_from_minibatch:
+        if self.nce_includes_all_negatives_from_minibatch:
             # reshape features as if they are all negatives of minibatch of size 1.
             batch_dim_for_bmm = 1
         else:

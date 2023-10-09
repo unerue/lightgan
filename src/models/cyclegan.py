@@ -150,7 +150,7 @@ class CycleGanModel(LightningModule):
     def forward(self, x, z):
         return self.g.x(x), self.g.y(z), self.d.x(x), self.d.y(z)
 
-    def configure_optimizers(self) -> Any:
+    def configure_optimizers(self) -> list[dict[Any]]:
         optimizer_g = self.hparams.optimizer1(
             itertools.chain(self.g.x.parameters(), self.g.y.parameters())
         )
@@ -181,28 +181,26 @@ class CycleGanModel(LightningModule):
             same_a = self.g.x(image_b)
             loss_i_a = \
                 self.criterion_identity(same_a, image_b) * self.hparams.lambda_b * self.hparams.lambda_i
-            self.log("identity_a", loss_i_a, prog_bar=True)
     
             same_b = self.g.y(image_a)
             loss_i_b = \
                 self.criterion_identity(same_b, image_a) * self.hparams.lambda_a * self.hparams.lambda_i
-            self.log("identity_b", loss_i_b, prog_bar=True)
+            
+            self.log("loss_identity", loss_i_a + loss_i_b, prog_bar=True)
     
         # GAN loss D_A(G_A(A))
         loss_d_x = self.criterion_gan(self.d.x(fake_b), real=True)
-        
         # GAN loss D_B(G_B(B))
         loss_d_y = self.criterion_gan(self.d.y(fake_a), real=True)
         # Identity loss
         # G_A should be identity if real_B is fed: ||G_A(B) - B||
         loss_cycle_a = self.criterion_cycle(cycle_a, image_a) * self.hparams.lambda_a
-        self.log("cycle_a", loss_cycle_a, prog_bar=True)
-
+    
         loss_cycle_b = self.criterion_cycle(cycle_b, image_b) * self.hparams.lambda_b
-        self.log("cycle_b", loss_cycle_b, prog_bar=True)
+        self.log("loss_cycle", loss_cycle_a + loss_cycle_b, prog_bar=True)
 
         g_loss = loss_d_x + loss_d_y + loss_cycle_a + loss_cycle_b + loss_i_a + loss_i_b
-        self.log("g_loss", g_loss, prog_bar=True)
+        self.log("loss_g", g_loss, prog_bar=True)
 
         return g_loss
 
@@ -216,7 +214,7 @@ class CycleGanModel(LightningModule):
         pred_fake_a = self.d.x(fake_b.detach())
         loss_dx_fake = self.criterion_gan(pred_fake_a, False)
         dx_loss = (loss_dx_real + loss_dx_fake) * 0.5
-        self.log("dx_loss", dx_loss, prog_bar=True)
+        self.log("loss_dx", dx_loss, prog_bar=True)
 
         pred_real_b = self.d.y(image_a)
         loss_dy_real = self.criterion_gan(pred_real_b, True)
@@ -225,7 +223,7 @@ class CycleGanModel(LightningModule):
         loss_dy_fake = self.criterion_gan(pred_fake_b, False)
         dy_loss = (loss_dy_real + loss_dy_fake) * 0.5
 
-        self.log("dy_loss", dy_loss, prog_bar=True)
+        self.log("loss_dy", dy_loss, prog_bar=True)
         return dx_loss, dy_loss
 
     def training_step(self, batch, batch_idx):
@@ -249,11 +247,11 @@ class CycleGanModel(LightningModule):
         dx_loss, dy_loss = self.discriminator_training_step(image_a, image_b, fake_a, fake_b)
         self.manual_backward(dx_loss)
         self.manual_backward(dy_loss)
-        self.log("d_loss", dx_loss + dy_loss, prog_bar=True)
+        self.log("loss_d", dx_loss + dy_loss, prog_bar=True)
         optimizer_d.step()
         self.untoggle_optimizer(optimizer_d)
-        
-        if len(self.training_step_outputs1) < 7:
+
+        if len(self.training_step_outputs1) < 10:
             with torch.no_grad():
                 fake_b = self.g.x(image_a).detach()
                 self.training_step_outputs1.append(image_a)

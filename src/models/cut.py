@@ -118,7 +118,7 @@ class CutModel(LightningModule):
     
         return return_list
 
-    def calculate_nce_loss(self, source, target):
+    def compute_nce_loss(self, source, target):
         feat_q = self.g(target, self.hparams.nce_layers, encode_only=True)
 
         if self.hparams.flip_equivariance:
@@ -143,16 +143,16 @@ class CutModel(LightningModule):
         loss_g_gan = self.criterion1(pred_fake_b, True).mean() * self.hparams.lambda_gan
 
         # if self.hparams.lambda_nce > 0:
-        loss_nce = self.calculate_nce_loss(image_a, fake_b)
+        loss_nce = self.compute_nce_loss(image_a, fake_b)
         
         loss_nce_y = 0.0
         if self.hparams.nce_idt:
-            loss_nce_y = self.calculate_nce_loss(image_b, idt_b)
+            loss_nce_y = self.compute_nce_loss(image_b, idt_b)
     
         loss_nce = (loss_nce + loss_nce_y) * 0.5
-        self.log("nce", loss_nce, prog_bar=True)
+        self.log("loss_nce", loss_nce, prog_bar=True)
         g_loss = loss_g_gan + loss_nce
-        self.log("g_loss", g_loss, prog_bar=True)
+        self.log("loss_g", g_loss, prog_bar=True)
         return g_loss
 
     def discriminator_training_step(self, image_a, image_b, fake_b):
@@ -163,7 +163,7 @@ class CutModel(LightningModule):
         loss_d_real = self.criterion1(pred_real, True).mean()
 
         loss_d = (loss_d_fake + loss_d_real) * 0.5
-        self.log("d_loss", loss_d, prog_bar=True)
+        self.log("loss_d", loss_d, prog_bar=True)
         return loss_d
     
     def on_fit_start(self) -> None:
@@ -180,6 +180,8 @@ class CutModel(LightningModule):
 
         if self.hparams.nce_idt:
             reals = torch.cat((image_a, image_b), dim=0)
+        else:
+            reals = image_a
 
         if self.hparams.flip_equivariance:
             if random.random() < 0.5:

@@ -13,7 +13,7 @@ data:
   _target_: src.datasets.UnalignedDataModule
   data_dir: ${paths.data_dir}/horse2zebra
   batch_size: 1
-  num_workers: 12
+  num_workers: 4
   pin_memory: true
 
 model:

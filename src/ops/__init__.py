@@ -20,5 +20,8 @@ __all__ = [
     "Intializer",
     "initialize_weights",
     "set_requires_grad",
-    "DelayedLinearDecayLR"
+    "DelayedLinearDecayLR",
+    "Encoder",
+    "Decoder",
+    "MultiScaleDiscriminator",
 ]
