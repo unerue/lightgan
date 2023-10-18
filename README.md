@@ -1,15 +1,16 @@
 # ⚡LightGAN: GAN with PyTorch Lightning
 
-* GAN (2014)
-* DCGAN (2015)
-* WGAN
-* CycleGAN (2017)
-* GcGAN (2019): https://github.com/hufu6371/GcGAN
-* CUTGAN (2020)
-* SINCUT (2020)
-* NOT (2023): https://github.com/iamalexkorotin/NeuralOptimalTransport
-* SBGAN (2023)
-* Image Style Transfer using CNN (2016): https://github.com/ali-gtw/ImageStyleTransfer-CNN
+- [ ] GAN (2014)
+- [ ] DCGAN (2015)
+- [ ] WGAN
+- [X] CycleGAN (2017) 
+- [ ] GcGAN (2019): https://github.com/hufu6371/GcGAN
+- [X] CUT (2020)
+- [X] FastCUT (2020)
+- [ ] SINCUT (2020)
+- [ ] NOT (2023): https://github.com/iamalexkorotin/NeuralOptimalTransport
+- [X] SB (2023)
+- [ ] Image Style Transfer using CNN (2016): https://github.com/ali-gtw/ImageStyleTransfer-CNN
 
 ## Lightning hooks
 

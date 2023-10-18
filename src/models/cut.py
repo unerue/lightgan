@@ -20,7 +20,7 @@ from ..ops import (
     Initializer,
     set_requires_grad
 )
-from ..datasets import inversed_transform
+from ..datasets import inversed_transform, InverseNormalize, inversed_transform_ir
 
 
 class CutModel(LightningModule):
@@ -34,8 +34,8 @@ class CutModel(LightningModule):
     """
     def __init__(
         self,
-        optimizer1: optim.Optimizer,
-        optimizer2: optim.Optimizer,
+        optimizer1: optim.Optimizer = None,
+        optimizer2: optim.Optimizer = None,
         optimizer3: optim.Optimizer = None,
         scheduler1: Optional[Any] = None,
         scheduler2: Optional[Any] = None,
@@ -51,6 +51,8 @@ class CutModel(LightningModule):
         batch_size: int = 1,
         nce_includes_all_negatives_from_minibatch: bool = False,
         image_shape: tuple[int, int, int] = (3, 256, 256),
+        in_channels: int = 3,
+        out_channels: int = 3,
         **kwargs
     ) -> None:
         super().__init__()
@@ -58,8 +60,8 @@ class CutModel(LightningModule):
         self.automatic_optimization = False
 
         self.g = ResnetGenerator(
-            in_channels=3,
-            out_channels=3,
+            in_channels=in_channels,
+            out_channels=out_channels,
             expanded_channels=64,
             norm_layer=nn.InstanceNorm2d,
             use_dropout=True,
@@ -74,7 +76,7 @@ class CutModel(LightningModule):
             nc=256,
         )
         self.d = NLayerDiscriminator(
-            in_channels=3,
+            in_channels=in_channels, # 3 channels
             expanded_channels=64,
             num_layers=3,
             norm_layer=nn.InstanceNorm2d,
@@ -100,7 +102,7 @@ class CutModel(LightningModule):
         self.validation_step_outputs2 = []
 
     def forward(self, x, z):
-        return self.g(x), self.d(z)
+        return self.g(x)
 
     def configure_optimizers(self) -> Any:
         return_list = []
@@ -118,6 +120,7 @@ class CutModel(LightningModule):
         return return_list
 
     def compute_nce_loss(self, source, target):
+        # target = torch.cat([target, target, target], dim=1) # !delete for original
         feat_q = self.g(target, self.hparams.nce_layers, encode_only=True)
 
         if self.hparams.flip_equivariance:
@@ -146,6 +149,7 @@ class CutModel(LightningModule):
         
         loss_nce_y = 0.0
         if self.hparams.nce_idt:
+            # idt_b = torch.cat([idt_b, idt_b, idt_b], dim=1) # !delete for original
             loss_nce_y = self.compute_nce_loss(image_b, idt_b)
     
         loss_nce = (loss_nce + loss_nce_y) * 0.5
@@ -179,6 +183,8 @@ class CutModel(LightningModule):
 
         if self.hparams.nce_idt:
             reals = torch.cat((image_a, image_b), dim=0)
+            # image_b13 = torch.cat([image_b, image_b, image_b], dim=1) # !delete for original
+            # reals = torch.cat((image_a, image_b13), dim=0)  # !delete for original
         else:
             reals = image_a
 
@@ -233,6 +239,17 @@ class CutModel(LightningModule):
 
         image_b = inversed_transform(image_b)
         fake_b = inversed_transform(fake_b)
+
+        # rgb_transform = InverseNormalize()
+        # ir_transform = InverseNormalize(mean=[-1.], std=[2.])
+
+        # ! delete for original
+        # image_b = inversed_transform_ir(image_b)
+        # fake_b = inversed_transform_ir(fake_b)
+
+        # ! grayscale
+        # image_b = torch.cat([image_b, image_b, image_b], dim=1)
+        # fake_b = torch.cat([fake_b, fake_b, fake_b], dim=1)
 
         self.metric_fid.update(image_b, real=True)
         self.metric_fid.update(fake_b, real=False)
