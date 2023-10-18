@@ -120,7 +120,6 @@ class CutModel(LightningModule):
         return return_list
 
     def compute_nce_loss(self, source, target):
-        # target = torch.cat([target, target, target], dim=1) # !delete for original
         feat_q = self.g(target, self.hparams.nce_layers, encode_only=True)
 
         if self.hparams.flip_equivariance:
@@ -149,7 +148,6 @@ class CutModel(LightningModule):
         
         loss_nce_y = 0.0
         if self.hparams.nce_idt:
-            # idt_b = torch.cat([idt_b, idt_b, idt_b], dim=1) # !delete for original
             loss_nce_y = self.compute_nce_loss(image_b, idt_b)
     
         loss_nce = (loss_nce + loss_nce_y) * 0.5
@@ -183,8 +181,6 @@ class CutModel(LightningModule):
 
         if self.hparams.nce_idt:
             reals = torch.cat((image_a, image_b), dim=0)
-            # image_b13 = torch.cat([image_b, image_b, image_b], dim=1) # !delete for original
-            # reals = torch.cat((image_a, image_b13), dim=0)  # !delete for original
         else:
             reals = image_a
 
